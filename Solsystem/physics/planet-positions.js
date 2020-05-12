@@ -1110,7 +1110,7 @@ module.exports = {
 			return {
 				name: body.name,
 				position: body.getPosition(),
-				velocity: body.getVelocity()
+				velocity: body.getVelocity(), 
 			};
 		});
 	}

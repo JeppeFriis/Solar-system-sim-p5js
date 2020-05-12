@@ -20,20 +20,21 @@ let cameraX, cameraY, cameraZ;
 let bodies, bodyNameElements;
 bodies = bodyNameElements = [];
 
-let bodyToCameraDist = [];
-
 let AU = 149597870700;
+let ORBITAL_PERIODS = [0, 0.2408, 0.6152, 1, 1.8809, 11.862, 29.458, 84.01, 164.79, 248.54, 0, 0];
+
 
 let simScale = 5000;
 let radiusScale = 10;
 
-let trailStepTime, trailSteps;
-trailStepTime = 50 * 60 * 60 * 1000;
-trailSteps = 20;
+let trailSteps;
+trailSteps = 40;
 
 let font; 
 
 function preload() {
+    console.log( window.lagrange.planet_positions.getPositions(Date.now(), true));
+    
     bodies = getBodies(getMovements(), window.lagrange.planet_info);
     font = loadFont('./assets/ARIAL.TTF');
 }
@@ -46,8 +47,8 @@ function setup() {
 }
 
 function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-    
+    resizeCanvas(windowWidth, windowHeight);   
+    perspective(PI/3.0, width/height, 100, 10000000000);
 }
 
 function draw() {
@@ -87,7 +88,7 @@ function drawBodies () {
 
         angleMode(RADIANS);
 
-        // drawBodyTrail(i);
+        drawBodyTrail(i);
 
         push();        
         normalMaterial();
@@ -99,20 +100,22 @@ function drawBodies () {
         var screenPos = screenPosition(bodyPos);
         var distToCamera = bodyPos.dist(createVector(cameraX, cameraY, cameraZ)); 
 
-        if (bodyNameElements.length < bodies.length) {
-            bodyNameElements.push(createElement('h1', bodies[i].name));
-            bodyToCameraDist.push({element: bodyNameElements[i], distance: distToCamera});
-            bodyNameElements[i].center();
-        }
+        var bodyIndex = bodyNameElements.findIndex(b => b.name == bodies[i].name);
 
-        bodyNameElements[i].position(windowWidth/2 + screenPos.x, windowHeight/2 + screenPos.y);
+        if (bodyIndex == -1) {
+            var bodyNameElement = createElement('h1', bodies[i].name);
+            bodyNameElement.position(windowWidth/2 + screenPos.x, windowHeight/2 + screenPos.y);
+            bodyNameElements.push({name: bodies[i].name, element: bodyNameElement, distance: distToCamera});
+        } else {
+            bodyNameElements[bodyIndex].element.position(windowWidth/2 + screenPos.x, windowHeight/2 + screenPos.y);
+            bodyNameElements[bodyIndex].distance = distToCamera;
+        }
     }
 
-    bodyToCameraDist.sort((a,b) => b.distance - a.distance);
+    bodyNameElements.sort((a,b) => b.distance - a.distance);
 
-    // VIRKER IKKE
-    for(var i = 0; i < bodyToCameraDist.length; i++) {
-        bodyToCameraDist[i].element.style("z-index: " + i);
+    for(var i = 0; i < bodyNameElements.length; i++) {
+        bodyNameElements[i].element.style("z-index", i);
     }
 }
 
@@ -122,9 +125,17 @@ function drawBodyTrail(i) {
     fill(0,0,0,0);
     stroke(255);
     beginShape();
-    for (const p of positions) {
-        curveVertex(p.x, p.y, p.z);
+
+    curveVertex(positions[0].x , positions[0].y, positions[0].z);
+
+    for (var j = 0; j < positions.length; j++) {
+        curveVertex(positions[j].x, positions[j].y, positions[j].z);
     }
+
+    // End at the start 
+    curveVertex(positions[0].x , positions[0].y, positions[0].z);
+    curveVertex(positions[0].x , positions[0].y, positions[0].z);
+
     endShape();
 }
 
@@ -170,16 +181,16 @@ function getMovements() {
         movements.push({positions: [], velocities: []});
     }
 
-    for(var i = 0; i < trailSteps; i++) {
-        var m = window.lagrange.planet_positions.getPositions(Date.now() - i * trailStepTime, true);
+    for(var i = 0; i < movements.length; i++) {
+        var trailStepTime = ORBITAL_PERIODS[i]/trailSteps * 365 * 24 * 60 * 60 * 1000;
         
-        for(var j = 0; j < m.length; j++) {
-            movements[j].positions[i] = p5.Vector.div(createVector(m[j].position.y, m[j].position.z, m[j].position.x), AU).mult(simScale);
-            movements[j].velocities[i] = p5.Vector.div(createVector(m[j].velocity.y, m[j].velocity.z, m[j].velocity.x), AU).mult(simScale);
+        for(var j = 0; j < trailSteps; j++) {
+            var m = window.lagrange.planet_positions.getPositions(Date.now() - j * trailStepTime, true);
+
+            movements[i].positions[j] = p5.Vector.div(createVector(m[i].position.y, m[i].position.z, m[i].position.x), AU).mult(simScale);
+            movements[i].velocities[j] = p5.Vector.div(createVector(m[i].velocity.y, m[i].velocity.z, m[i].velocity.x), AU).mult(simScale);
         }
     }
-
-    console.log(movements);
 
     return movements;
 }
@@ -202,6 +213,8 @@ class Body {
         this.velocities = movement.velocities; // m/s
 
         this.mass = info.mass; // kg
-        this.radius = info.radius * 1000 // m
+        this.radius = info.radius * 1000 // 
     }
 }
+
+
