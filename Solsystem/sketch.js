@@ -27,7 +27,7 @@ let simScale = 5000;
 let radiusScale = 10;
 
 let trailSteps;
-trailSteps = 50;
+trailSteps = 1000;
 
 let font; 
 
@@ -42,12 +42,12 @@ function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL);
     addScreenPositionFunction();
 
-    perspective(PI/3.0, width/height, 100, 10000000000);
+    perspective(PI/3.0, width/height, 10, 10000000000);
 }
 
 function windowResized() {
     resizeCanvas(windowWidth, windowHeight);   
-    perspective(PI/3.0, width/height, 100, 10000000000);
+    perspective(PI/3.0, width/height, 10, 10000000000);
 }
 
 function draw() {
@@ -73,6 +73,7 @@ function draw() {
     endShape();
     pop();
 
+
     setCameraPos();
 
     drawBodies();
@@ -96,7 +97,25 @@ function drawBodies () {
         sphere(bodyRad);
         pop();
 
+
+        // Calculate if planet is behind camera or not
         var screenPos = screenPosition(bodyPos);
+
+        var cVector = createVector(cameraX, cameraY, cameraZ);
+
+        var bMag = bodyPos.magSq();
+        var cMag = cVector.magSq();
+
+        var cross = bodyPos.dot(cVector);
+
+        if (Math.sign(cross) <= 0) {
+            screenPos = screenPosition(bodyPos);
+        } else {
+            if (bMag > cMag) {
+                screenPos = createVector(windowWidth,0);
+            }
+        }
+
         var distToCamera = bodyPos.dist(createVector(cameraX, cameraY, cameraZ)); 
 
         var bodyIndex = bodyNameElements.findIndex(b => b.name == bodies[i].name);
@@ -123,7 +142,6 @@ function drawBodyTrail(i) {
 
     noFill();
     stroke(255);
-    strokeWeight(1.5);
     beginShape();
 
     vertex(positions[0].x , positions[0].y, positions[0].z);
