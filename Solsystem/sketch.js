@@ -1,4 +1,3 @@
-
 let lastMouseX, lastMouseY;
 
 let cameraDistanceMax, cameraDistanceMin, cameraDistance;
@@ -21,22 +20,22 @@ let bodies, bodyNameElements;
 bodies = bodyNameElements = [];
 
 let AU = 149597870700;
-let ORBITAL_PERIODS = [0, 0.2408, 0.6152, 1, 1.8809, 11.862, 29.458, 84.01, 164.79, 248.54, 0, 0];
+let ORBITAL_PERIODS = [0, 0.2408, 0.6152, 1, 1.8809, 11.862, 29.458, 84.01, 164.79, 248.54];
 
 
 let simScale = 5000;
 let radiusScale = 10;
 
 let trailSteps;
-trailSteps = 40;
+trailSteps = 50;
 
 let font; 
 
 function preload() {
-    console.log( window.lagrange.planet_positions.getPositions(Date.now(), true));
-    
     bodies = getBodies(getMovements(), window.lagrange.planet_info);
     font = loadFont('./assets/ARIAL.TTF');
+
+    console.log(bodies);
 }
 
 function setup() {
@@ -52,7 +51,7 @@ function windowResized() {
 }
 
 function draw() {
-    background(10,10,10);
+    background(0);
 
     push();
     stroke(color(255,0,0));
@@ -122,19 +121,20 @@ function drawBodies () {
 function drawBodyTrail(i) {
     var positions = bodies[i].positions;
 
-    fill(0,0,0,0);
+    noFill();
     stroke(255);
+    strokeWeight(1.5);
     beginShape();
 
-    curveVertex(positions[0].x , positions[0].y, positions[0].z);
+    vertex(positions[0].x , positions[0].y, positions[0].z);
 
     for (var j = 0; j < positions.length; j++) {
-        curveVertex(positions[j].x, positions[j].y, positions[j].z);
+        vertex(positions[j].x, positions[j].y, positions[j].z);
     }
 
     // End at the start 
-    curveVertex(positions[0].x , positions[0].y, positions[0].z);
-    curveVertex(positions[0].x , positions[0].y, positions[0].z);
+    vertex(positions[0].x , positions[0].y, positions[0].z);
+    vertex(positions[0].x , positions[0].y, positions[0].z);
 
     endShape();
 }
@@ -177,7 +177,7 @@ function setCameraPos() {
 function getMovements() {
     var movements = [];
     
-    while (movements.length < 12) {
+    while (movements.length < ORBITAL_PERIODS.length) {
         movements.push({positions: [], velocities: []});
     }
 
@@ -187,8 +187,8 @@ function getMovements() {
         for(var j = 0; j < trailSteps; j++) {
             var m = window.lagrange.planet_positions.getPositions(Date.now() - j * trailStepTime, true);
 
-            movements[i].positions[j] = p5.Vector.div(createVector(m[i].position.y, m[i].position.z, m[i].position.x), AU).mult(simScale);
-            movements[i].velocities[j] = p5.Vector.div(createVector(m[i].velocity.y, m[i].velocity.z, m[i].velocity.x), AU).mult(simScale);
+            movements[i].positions[j] = p5.Vector.div(createVector(m[i].position.y, -m[i].position.z, m[i].position.x), AU).mult(simScale);
+            movements[i].velocities[j] = p5.Vector.div(createVector(m[i].velocity.y, -m[i].velocity.z, m[i].velocity.x), AU).mult(simScale);
         }
     }
 
@@ -216,5 +216,8 @@ class Body {
         this.radius = info.radius * 1000 // 
     }
 }
+
+
+
 
 
