@@ -21,13 +21,15 @@ bodies = bodyNameElements = [];
 
 let AU = 149597870700;
 let ORBITAL_PERIODS = [0, 0.2408, 0.6152, 1, 1.8809, 11.862, 29.458, 84.01, 164.79, 248.54];
-
+let G = 6.674e-11;
 
 let simScale = 5000;
 let radiusScale = 10;
 
 let trailSteps;
 trailSteps = 1000;
+
+let lastSteps = [];
 
 let font; 
 
@@ -73,6 +75,7 @@ function draw() {
     endShape();
     pop();
 
+    for(var i = 0; i < 1000; i++) setPositions();
 
     setCameraPos();
 
@@ -83,7 +86,7 @@ function drawBodies () {
     for(var i = 0; i < bodies.length; i++) {
         var scale = AU * simScale;
 
-        var bodyPos = bodies[i].positions[0];
+        var bodyPos = bodies[i].positionsScaled[0];
         var bodyRad = bodies[i].radius/AU*simScale*radiusScale;
 
         angleMode(RADIANS);
@@ -137,8 +140,10 @@ function drawBodies () {
     }
 }
 
-function drawBodyTrail(i) {
-    var positions = bodies[i].positions;
+function drawBodyTrail(bodyIndex) {
+    shiftPositions(bodyIndex);
+
+    var positions = bodies[bodyIndex].positionsScaled;
 
     noFill();
     stroke(255);
@@ -150,13 +155,90 @@ function drawBodyTrail(i) {
         vertex(positions[j].x, positions[j].y, positions[j].z);
     }
 
-    // End at the start 
-    vertex(positions[0].x , positions[0].y, positions[0].z);
-    vertex(positions[0].x , positions[0].y, positions[0].z);
-
     endShape();
 }
 
+function calcAccelerations() {
+    var bodyForces = [];
+
+    for (var i = 0; i < ORBITAL_PERIODS.length; i++) {
+        bodyForces.push({name: bodies[i].name, forces: Array(ORBITAL_PERIODS.length).fill(null)});
+    }
+
+    for (var i = 0; i < bodyForces.length; i++) {
+        for (var j = 0; j < bodyForces.length; j++) {
+            if (i == j) continue;
+            if (bodyForces[i].forces[j] != null) continue;
+
+            var r = p5.Vector.sub(bodies[i].position, bodies[j].position);
+            var rm = r.mag();
+
+            var F = p5.Vector.mult(r,(G*bodies[i].mass*bodies[j].mass)/(rm ** 3));
+
+            bodyForces[i].forces[j] = p5.Vector.mult(F, -1);
+            bodyForces[j].forces[i] = F;
+        }
+    }
+
+    var accs = [];
+
+    for (var i = 0; i < bodyForces.length; i++) {
+        var F = createVector(0,0,0);
+
+        for (var j = 0; j < bodyForces.length; j++) {
+            if (bodyForces[i].forces[j] == null) continue;
+
+            F.add(bodyForces[i].forces[j]);
+        }
+
+        var a = F.div(bodies[i].mass);
+
+        var as = p5.Vector.div(a, AU).mult(simScale);
+
+        accs.push({unscaled: a, scaled: as});
+    }
+
+    return accs;
+}
+
+function setPositions() {
+    setVelocities();
+
+    for (var i = 0; i < ORBITAL_PERIODS.length; i++) {
+        
+        bodies[i].position.add(bodies[i].velocity);
+        bodies[i].positionsScaled[0].add(bodies[i].velocityScaled);
+    }
+}
+
+function setVelocities() {
+    var accs = calcAccelerations();
+
+    for (var i = 0; i < ORBITAL_PERIODS.length; i++) {
+        bodies[i].velocity.add(accs[i].unscaled);
+        bodies[i].velocityScaled.add(accs[i].scaled);
+    }
+}
+
+function shiftPositions(bodyIndex) {
+    if (lastSteps.length < ORBITAL_PERIODS.length) {
+        for (var j = 0; j < ORBITAL_PERIODS.length; j++) {
+            lastSteps.push({position: bodies[j].positionsScaled[bodies[j].positionsScaled.length - 1], distance: p5.Vector.dist(bodies[j].positionsScaled[bodies[j].positionsScaled.length - 2], bodies[j].positionsScaled[bodies[j].positionsScaled.length - 1])});
+        }
+    }
+
+    var d = p5.Vector.dist(bodies[bodyIndex].positionsScaled[0], bodies[bodyIndex].positionsScaled[1]);
+
+    bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 1] = p5.Vector.lerp(lastSteps[bodyIndex].position, bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 2], d/lastSteps[bodyIndex].distance);
+
+    if (d > lastSteps[bodyIndex].distance) {
+        bodies[bodyIndex].positionsScaled.unshift(bodies[bodyIndex].positionsScaled[0].copy());
+
+        bodies[bodyIndex].positionsScaled.pop();
+
+        lastSteps[bodyIndex] = {position: bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 1], distance: p5.Vector.dist(bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 2], bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 1])};
+    }
+}
 
 function mousePressed() {
     lastMouseX = mouseX;
@@ -196,17 +278,26 @@ function getMovements() {
     var movements = [];
     
     while (movements.length < ORBITAL_PERIODS.length) {
-        movements.push({positions: [], velocities: []});
+        movements.push({position: p5.Vector, velocity: p5.Vector, positionsScaled: [], velocityScaled: p5.Vector});
     }
 
     for(var i = 0; i < movements.length; i++) {
         var trailStepTime = ORBITAL_PERIODS[i]/trailSteps * 365 * 24 * 60 * 60 * 1000;
-        
+
         for(var j = 0; j < trailSteps; j++) {
             var m = window.lagrange.planet_positions.getPositions(Date.now() - j * trailStepTime, true);
 
-            movements[i].positions[j] = p5.Vector.div(createVector(m[i].position.y, -m[i].position.z, m[i].position.x), AU).mult(simScale);
-            movements[i].velocities[j] = p5.Vector.div(createVector(m[i].velocity.y, -m[i].velocity.z, m[i].velocity.x), AU).mult(simScale);
+            var p = createVector(m[i].position.y, -m[i].position.z, m[i].position.x);
+            var v = createVector(m[i].velocity.y, -m[i].velocity.z, m[i].velocity.x);
+
+            movements[i].positionsScaled[j] = p5.Vector.div(p, AU).mult(simScale);
+
+            if (j == 0) {
+                movements[i].position = p;
+                movements[i].velocity = v;
+
+                movements[i].velocityScaled = p5.Vector.div(v, AU).mult(simScale);
+            }
         }
     }
 
@@ -227,8 +318,11 @@ class Body {
     constructor (movement, info) {
         this.name = info.title;
 
-        this.positions = movement.positions; // m
-        this.velocities = movement.velocities; // m/s
+        this.position = movement.position; // m, only item [0] can be expected to an unscaled representation of the planets position. This probably shouldn't be an array
+        this.velocity = movement.velocity; // m/s, velocities probably shouldn't be returned as an array
+
+        this.positionsScaled = movement.positionsScaled;
+        this.velocityScaled = movement.velocityScaled;
 
         this.mass = info.mass; // kg
         this.radius = info.radius * 1000 // 
