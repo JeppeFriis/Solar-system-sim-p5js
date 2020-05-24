@@ -16,11 +16,28 @@ let cameraZoomSensitivity = 0.001;
 
 let cameraX, cameraY, cameraZ;
 
-let bodies, bodyNameElements;
-bodies = bodyNameElements = [];
+let bodies, bodyMenus; // p5.Elements
+bodies = bodyMenus = [];
+
+let selectedBodyMenu = null; // p5.Element
+
+// Explanation for why I use p5.Elements instead of pure a HTML element:
+// p5.Element has the position function, which I find easier to use than "top: / left:" etc.
+
+let BODY_DATA = [
+    {name: "The Sun",   orbital_period: 0,      color: "#ffa502"}, 
+    {name: "Mercury",   orbital_period: 0.2408, color: "#dfe4ea"}, 
+    {name: "Venus",     orbital_period: 0.6152, color: "#eccc68"},
+    {name: "The Earth", orbital_period: 1,      color: "#1e90ff"},
+    {name: "Mars",      orbital_period: 1.8809, color: "#ff7f50"},
+    {name: "Jupiter",   orbital_period: 11.862, color: "#f1f2f6"},
+    {name: "Saturn",    orbital_period: 29.458, color: "#edca5a"},
+    {name: "Uranus",    orbital_period: 84.01,  color: "#70a1ff"},
+    {name: "Neptune",   orbital_period: 164.79, color: "#3742fa"},
+    {name: "Pluto",     orbital_period: 248.54, color: "#ff4757"}
+];
 
 let AU = 149597870700;
-let ORBITAL_PERIODS = [0, 0.2408, 0.6152, 1, 1.8809, 11.862, 29.458, 84.01, 164.79, 248.54];
 let G = 6.674e-11;
 
 let simScale = 5000;
@@ -31,9 +48,15 @@ trailSteps = 1000;
 
 let lastSteps = [];
 
+let timeScale = 1;
+
 let font; 
 
+let paused = false;
+
 function preload() {
+
+
     bodies = getBodies(getMovements(), window.lagrange.planet_info);
     font = loadFont('./assets/ARIAL.TTF');
 
@@ -42,7 +65,13 @@ function preload() {
 
 function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL);
+    select('canvas').elt.addEventListener('mousedown', backgroundClick);
+
     addScreenPositionFunction();
+
+    setTimeScale(10000);
+
+    setbodyMenus();
 
     perspective(PI/3.0, width/height, 10, 10000000000);
 }
@@ -55,27 +84,7 @@ function windowResized() {
 function draw() {
     background(0);
 
-    push();
-    stroke(color(255,0,0));
-    beginShape();
-    vertex(0,0,0);
-    vertex(1000,0,0);
-    endShape();
-
-    stroke(color(0,255,0));
-    beginShape();
-    vertex(0,0,0);
-    vertex(0,1000,0);
-    endShape();
-
-    stroke(color(0,0,255));
-    beginShape();
-    vertex(0,0,0);
-    vertex(0,0,1000);
-    endShape();
-    pop();
-
-    for(var i = 0; i < 1000; i++) setPositions();
+    if (!paused) setPositions();
 
     setCameraPos();
 
@@ -94,49 +103,28 @@ function drawBodies () {
         drawBodyTrail(i);
 
         push();        
-        normalMaterial();
+        fill(color(BODY_DATA[i].color));
         // console.log("pos: " + bodies[i].position);
         translate(bodyPos);
         sphere(bodyRad);
         pop();
 
-
-        // Calculate if planet is behind camera or not
-        var screenPos = screenPosition(bodyPos);
-
-        var cVector = createVector(cameraX, cameraY, cameraZ);
-
-        var bMag = bodyPos.magSq();
-        var cMag = cVector.magSq();
-
-        var cross = bodyPos.dot(cVector);
-
-        if (Math.sign(cross) <= 0) {
-            screenPos = screenPosition(bodyPos);
-        } else {
-            if (bMag > cMag) {
-                screenPos = createVector(windowWidth,0);
-            }
-        }
+        var screenPos = getScreenPosition(bodyPos);
 
         var distToCamera = bodyPos.dist(createVector(cameraX, cameraY, cameraZ)); 
 
-        var bodyIndex = bodyNameElements.findIndex(b => b.name == bodies[i].name);
-
-        if (bodyIndex == -1) {
-            var bodyNameElement = createElement('h1', bodies[i].name);
-            bodyNameElement.position(windowWidth/2 + screenPos.x, windowHeight/2 + screenPos.y);
-            bodyNameElements.push({name: bodies[i].name, element: bodyNameElement, distance: distToCamera});
-        } else {
-            bodyNameElements[bodyIndex].element.position(windowWidth/2 + screenPos.x, windowHeight/2 + screenPos.y);
-            bodyNameElements[bodyIndex].distance = distToCamera;
+        var bodyIndex = bodyMenus.findIndex(b => b.name == bodies[i].name);
+        
+        if (bodyIndex != -1) {
+            bodyMenus[bodyIndex].element.position(windowWidth/2 + screenPos.x, windowHeight/2 + screenPos.y);
+            bodyMenus[bodyIndex].distance = distToCamera;
         }
     }
 
-    bodyNameElements.sort((a,b) => b.distance - a.distance);
+    bodyMenus.sort((a,b) => b.distance - a.distance);
 
-    for(var i = 0; i < bodyNameElements.length; i++) {
-        bodyNameElements[i].element.style("z-index", i);
+    for(var i = 0; i < bodyMenus.length; i++) {
+        bodyMenus[i].element.style("z-index", i);
     }
 }
 
@@ -146,7 +134,7 @@ function drawBodyTrail(bodyIndex) {
     var positions = bodies[bodyIndex].positionsScaled;
 
     noFill();
-    stroke(255);
+    stroke(color(BODY_DATA[bodyIndex].color));
     beginShape();
 
     vertex(positions[0].x , positions[0].y, positions[0].z);
@@ -158,11 +146,99 @@ function drawBodyTrail(bodyIndex) {
     endShape();
 }
 
+function setbodyMenus() {
+    for (const b of bodies) {
+        var e = createDiv().class("bodyMenu");
+
+        e.child(createDiv(b.name));
+        
+        var massLabel = createElement("label", "Mass").class("bodyMenuSetting");
+        massLabel.elt.classList.add("bodyMenuSettingLabel");
+        massLabel.elt.htmlFor = b.name + "massInput";
+        massLabel.elt.style.display = "none";
+
+        var massInput = createElement("input").id(b.name +"massInput").class("bodyMenuSetting");
+        massInput.elt.classList.add("bodyMenuSettingInput");
+        massInput.elt.type = "text";
+        massInput.elt.style.display = "none";
+        massInput.elt.value = b.mass;
+
+        massInput.elt.addEventListener("input", bodyMenuMassSettingInput);
+
+        e.child(massLabel);
+        e.child(massInput);
+        
+    
+        e.elt.addEventListener("mouseenter", bodyMenuMouseEnter);
+        e.elt.addEventListener("mouseleave", bodyMenuMouseLeave);
+        e.elt.addEventListener("click", bodyMenuClick);
+
+        bodyMenus.push({name: b.name, element: e, distance: 0});
+    }
+}
+
+function bodyMenuMouseEnter(event) {
+    console.log(event.currentTarget)
+    event.currentTarget.classList.add("bodyMenuHighlight");
+}
+
+function bodyMenuMouseLeave(event) {
+    event.currentTarget.classList.remove("bodyMenuHighlight");
+    console.log(event.currentTarget);
+}
+
+function bodyMenuClick(event) {
+    resetSelectedBodyMenu();
+
+    event.currentTarget.classList.add("bodyMenuOpened");
+
+    var selectedBodyMenuIndex = bodyMenus.findIndex(b => b.element.elt == event.currentTarget);
+
+    selectedBodyMenu = bodyMenus[selectedBodyMenuIndex];
+    selectedBodyMenu.element.style('z-index', BODY_DATA.length);
+
+    bodyMenus.splice(selectedBodyMenuIndex, 1);
+
+    for(const c of selectedBodyMenu.element.elt.childNodes) {
+        if (c.classList.contains("bodyMenuSetting")) c.style.display = "inline-block";
+    }
+
+    paused = true;
+}
+
+function bodyMenuMassSettingInput(event) {
+    var body = bodies.find(b => b.name == selectedBodyMenu.name);
+
+    body.mass = parseFloat(event.currentTarget.value);
+
+    console.log(body.mass);
+}
+
+function backgroundClick() {
+    resetSelectedBodyMenu();
+}
+
+function resetSelectedBodyMenu() {
+    if (!selectedBodyMenu) return;
+
+    selectedBodyMenu.element.elt.classList.remove("bodyMenuOpened");
+
+    bodyMenus.push(selectedBodyMenu);
+
+    for(const c of selectedBodyMenu.element.elt.childNodes) {
+        if (c.classList.contains("bodyMenuSetting")) c.style.display = "none";
+    }
+
+    selectedBodyMenu = null;
+
+    paused = false;
+}
+
 function calcAccelerations() {
     var bodyForces = [];
 
-    for (var i = 0; i < ORBITAL_PERIODS.length; i++) {
-        bodyForces.push({name: bodies[i].name, forces: Array(ORBITAL_PERIODS.length).fill(null)});
+    for (var i = 0; i < BODY_DATA.length; i++) {
+        bodyForces.push({name: bodies[i].name, forces: Array(BODY_DATA.length).fill(null)});
     }
 
     for (var i = 0; i < bodyForces.length; i++) {
@@ -173,7 +249,7 @@ function calcAccelerations() {
             var r = p5.Vector.sub(bodies[i].position, bodies[j].position);
             var rm = r.mag();
 
-            var F = p5.Vector.mult(r,(G*bodies[i].mass*bodies[j].mass)/(rm ** 3));
+            var F = p5.Vector.mult(r,(G*bodies[i].mass*bodies[j].mass)/(rm ** 3) * (timeScale ** 2));
 
             bodyForces[i].forces[j] = p5.Vector.mult(F, -1);
             bodyForces[j].forces[i] = F;
@@ -204,40 +280,75 @@ function calcAccelerations() {
 function setPositions() {
     setVelocities();
 
-    for (var i = 0; i < ORBITAL_PERIODS.length; i++) {
-        
-        bodies[i].position.add(bodies[i].velocity);
-        bodies[i].positionsScaled[0].add(bodies[i].velocityScaled);
-    }
+        for (var i = 0; i < BODY_DATA.length; i++) {
+            bodies[i].position.add(bodies[i].velocity);
+            bodies[i].positionsScaled[0].add(bodies[i].velocityScaled);
+        }
 }
 
 function setVelocities() {
     var accs = calcAccelerations();
 
-    for (var i = 0; i < ORBITAL_PERIODS.length; i++) {
+    for (var i = 0; i < BODY_DATA.length; i++) {
         bodies[i].velocity.add(accs[i].unscaled);
         bodies[i].velocityScaled.add(accs[i].scaled);
     }
 }
 
+function setTimeScale(scale) {
+    for (var i = 0; i < BODY_DATA.length; i++) {
+        bodies[i].velocity.mult(scale/timeScale);
+        bodies[i].velocityScaled.mult(scale/timeScale);
+    }
+
+    timeScale = scale;
+}
+
 function shiftPositions(bodyIndex) {
-    if (lastSteps.length < ORBITAL_PERIODS.length) {
-        for (var j = 0; j < ORBITAL_PERIODS.length; j++) {
+    if (lastSteps.length < BODY_DATA.length) {
+        for (var j = 0; j < BODY_DATA.length; j++) {
             lastSteps.push({position: bodies[j].positionsScaled[bodies[j].positionsScaled.length - 1], distance: p5.Vector.dist(bodies[j].positionsScaled[bodies[j].positionsScaled.length - 2], bodies[j].positionsScaled[bodies[j].positionsScaled.length - 1])});
         }
     }
 
     var d = p5.Vector.dist(bodies[bodyIndex].positionsScaled[0], bodies[bodyIndex].positionsScaled[1]);
 
-    bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 1] = p5.Vector.lerp(lastSteps[bodyIndex].position, bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 2], d/lastSteps[bodyIndex].distance);
+    var f = d/lastSteps[bodyIndex].distance;
+
+    if (!isFinite(f)) return;
+
+
+
+    bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 1] = p5.Vector.lerp(lastSteps[bodyIndex].position, bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 2], f);
 
     if (d > lastSteps[bodyIndex].distance) {
-        bodies[bodyIndex].positionsScaled.unshift(bodies[bodyIndex].positionsScaled[0].copy());
+        bodies[bodyIndex].positionsScaled.splice(1,0,p5.Vector.lerp(bodies[bodyIndex].positionsScaled[1], bodies[bodyIndex].positionsScaled[0], 1/f));
 
         bodies[bodyIndex].positionsScaled.pop();
 
         lastSteps[bodyIndex] = {position: bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 1], distance: p5.Vector.dist(bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 2], bodies[bodyIndex].positionsScaled[bodies[bodyIndex].positionsScaled.length - 1])};
+
+        shiftPositions(bodyIndex);
+    
     }
+}
+
+function getScreenPosition(bodyPos) {
+    var screenPos = screenPosition(bodyPos);
+
+    // Check if the planet is behind the camera
+    var cVector = createVector(cameraX, cameraY, cameraZ);
+
+    var bMag = bodyPos.magSq();
+    var cMag = cVector.magSq();
+
+    var cross = bodyPos.dot(cVector);
+
+    if (Math.sign(cross) > 0 && bMag > cMag) {
+        screenPos = createVector(windowWidth,0);
+    }
+
+    return screenPos;
 }
 
 function mousePressed() {
@@ -246,6 +357,8 @@ function mousePressed() {
 }
 
 function mouseDragged() {
+    if (selectedBodyMenu) return;
+    
     dragX = lastMouseX - mouseX;
     dragY = lastMouseY - mouseY;
 
@@ -259,6 +372,8 @@ function mouseDragged() {
 }
 
 function mouseWheel(event) {
+    resetSelectedBodyMenu();
+
     cameraZoomStep = cameraDistance * cameraZoomSensitivity;
     cameraDistance = constrain(cameraDistance + event.delta * cameraZoomStep, cameraDistanceMin, cameraDistanceMax)
 }
@@ -277,12 +392,12 @@ function setCameraPos() {
 function getMovements() {
     var movements = [];
     
-    while (movements.length < ORBITAL_PERIODS.length) {
+    while (movements.length < BODY_DATA.length) {
         movements.push({position: p5.Vector, velocity: p5.Vector, positionsScaled: [], velocityScaled: p5.Vector});
     }
 
     for(var i = 0; i < movements.length; i++) {
-        var trailStepTime = ORBITAL_PERIODS[i]/trailSteps * 365 * 24 * 60 * 60 * 1000;
+        var trailStepTime = BODY_DATA[i].orbital_period/trailSteps * 365 * 24 * 60 * 60 * 1000;
 
         for(var j = 0; j < trailSteps; j++) {
             var m = window.lagrange.planet_positions.getPositions(Date.now() - j * trailStepTime, true);
