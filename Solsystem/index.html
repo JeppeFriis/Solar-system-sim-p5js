@@ -2,14 +2,23 @@
   <head>
     <link rel="stylesheet" type="text/css" href="stylesheet.css">
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto&display=swap" rel="stylesheet">
+    <script type="module" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule="" src="https://unpkg.com/ionicons@5.0.0/dist/ionicons/ionicons.js"></script>
     <script src="./physics/planet-positions.js"></script>
     <script src="./p5js/p5.js"></script>
     <script src="./p5js/addScreenPositionFunction.js"></script>
     <script src="sketch.js"></script>
   </head>
   <body>
-    <div id = "mainMenu">
-
+    <div id="mainMenu">
+      <div class="slidecontainer">
+        <input type="range" min="1" max="100" value="1" class="slider" id="timeScaleRange">
+      </div>
+      <div id="playPause">
+        <ion-icon class="playPauseIcon" style="display: none" id="pause" name="pause-sharp"></ion-icon>
+        <ion-icon class="playPauseIcon" style="display: inline" id="play" name="play-sharp"></ion-icon>
+      </div>
+      
     </div>
   </body>
 </html>

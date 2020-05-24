@@ -2,7 +2,7 @@ let lastMouseX, lastMouseY;
 
 let cameraDistanceMax, cameraDistanceMin, cameraDistance;
 cameraDistanceMax = 10000000;
-cameraDistanceMin = 5;
+cameraDistanceMin = 500;
 
 cameraDistance = 100000;
 let cameraAngleX, cameraAngleY;
@@ -20,6 +20,10 @@ let bodies, bodyMenus; // p5.Elements
 bodies = bodyMenus = [];
 
 let selectedBodyMenu = null; // p5.Element
+
+let playPause;
+
+let drag = false;
 
 // Explanation for why I use p5.Elements instead of pure a HTML element:
 // p5.Element has the position function, which I find easier to use than "top: / left:" etc.
@@ -52,11 +56,9 @@ let timeScale = 1;
 
 let font; 
 
-let paused = false;
+let paused = true;
 
 function preload() {
-
-
     bodies = getBodies(getMovements(), window.lagrange.planet_info);
     font = loadFont('./assets/ARIAL.TTF');
 
@@ -65,13 +67,20 @@ function preload() {
 
 function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL);
-    select('canvas').elt.addEventListener('mousedown', backgroundClick);
+
+    select('canvas').elt.addEventListener('mousedown', backgroundMouseDown);
+    select('canvas').elt.addEventListener('mouseup', backgroundMouseUp);
 
     addScreenPositionFunction();
 
-    setTimeScale(10000);
+    setTimeScale(1000000);
 
     setbodyMenus();
+
+    playPause = select("#playPause").elt;
+    playPause.addEventListener('mousedown', setPlayPause);
+
+    select("#timeScaleRange").elt.addEventListener("change", timeScaleRangeChange);
 
     perspective(PI/3.0, width/height, 10, 10000000000);
 }
@@ -84,7 +93,7 @@ function windowResized() {
 function draw() {
     background(0);
 
-    if (!paused) setPositions();
+    if (!paused && !selectedBodyMenu) setPositions();
 
     setCameraPos();
 
@@ -161,6 +170,7 @@ function setbodyMenus() {
         massInput.elt.classList.add("bodyMenuSettingInput");
         massInput.elt.type = "text";
         massInput.elt.style.display = "none";
+        massInput.elt.spellcheck = false;
         massInput.elt.value = b.mass;
 
         massInput.elt.addEventListener("input", bodyMenuMassSettingInput);
@@ -175,6 +185,16 @@ function setbodyMenus() {
 
         bodyMenus.push({name: b.name, element: e, distance: 0});
     }
+}
+
+function setPlayPause() {
+    if (!playPause) playPause = document.getElementById("playPause");
+
+    for(const c of playPause.children) {
+        c.style.display = c.style.display == "none" ? "inline" : "none";
+    }
+
+    paused = paused == true ? false : true;
 }
 
 function bodyMenuMouseEnter(event) {
@@ -202,8 +222,6 @@ function bodyMenuClick(event) {
     for(const c of selectedBodyMenu.element.elt.childNodes) {
         if (c.classList.contains("bodyMenuSetting")) c.style.display = "inline-block";
     }
-
-    paused = true;
 }
 
 function bodyMenuMassSettingInput(event) {
@@ -214,8 +232,14 @@ function bodyMenuMassSettingInput(event) {
     console.log(body.mass);
 }
 
-function backgroundClick() {
+function backgroundMouseDown() {
     resetSelectedBodyMenu();
+
+    drag = true;
+}
+
+function backgroundMouseUp() {
+    drag = false;
 }
 
 function resetSelectedBodyMenu() {
@@ -230,8 +254,6 @@ function resetSelectedBodyMenu() {
     }
 
     selectedBodyMenu = null;
-
-    paused = false;
 }
 
 function calcAccelerations() {
@@ -281,8 +303,8 @@ function setPositions() {
     setVelocities();
 
         for (var i = 0; i < BODY_DATA.length; i++) {
-            bodies[i].position.add(bodies[i].velocity);
-            bodies[i].positionsScaled[0].add(bodies[i].velocityScaled);
+            bodies[i].position.add(p5.Vector.mult(bodies[i].velocity, deltaTime/1000));
+            bodies[i].positionsScaled[0].add(p5.Vector.mult(bodies[i].velocityScaled, deltaTime/1000));
         }
 }
 
@@ -290,8 +312,8 @@ function setVelocities() {
     var accs = calcAccelerations();
 
     for (var i = 0; i < BODY_DATA.length; i++) {
-        bodies[i].velocity.add(accs[i].unscaled);
-        bodies[i].velocityScaled.add(accs[i].scaled);
+        bodies[i].velocity.add(p5.Vector.mult(accs[i].unscaled, deltaTime/1000));
+        bodies[i].velocityScaled.add(p5.Vector.mult(accs[i].scaled, deltaTime/1000));
     }
 }
 
@@ -302,6 +324,10 @@ function setTimeScale(scale) {
     }
 
     timeScale = scale;
+}
+
+function timeScaleRangeChange(event) {
+
 }
 
 function shiftPositions(bodyIndex) {
@@ -357,8 +383,8 @@ function mousePressed() {
 }
 
 function mouseDragged() {
-    if (selectedBodyMenu) return;
-    
+    if (!drag) return;
+
     dragX = lastMouseX - mouseX;
     dragY = lastMouseY - mouseY;
 
