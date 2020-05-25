@@ -54,7 +54,10 @@ let lastSteps = [];
 
 let timeScale = 1;
 
-let font; 
+let dateElement;
+
+let startDate, elapsedTime; 
+elapsedTime = 0;
 
 let paused = true;
 
@@ -73,14 +76,19 @@ function setup() {
 
     addScreenPositionFunction();
 
-    setTimeScale(1000000);
+    setTimeScale(1);
 
     setbodyMenus();
 
     playPause = select("#playPause").elt;
     playPause.addEventListener('mousedown', setPlayPause);
 
-    select("#timeScaleRange").elt.addEventListener("change", timeScaleRangeChange);
+    select("#timeScaleRange").elt.addEventListener("input", timeScaleRangeChange);
+
+    dateElement = select('#date').elt;
+    startDate = Date.now();
+
+    setDate();
 
     perspective(PI/3.0, width/height, 10, 10000000000);
 }
@@ -93,7 +101,11 @@ function windowResized() {
 function draw() {
     background(0);
 
-    if (!paused && !selectedBodyMenu) setPositions();
+    if (!paused && !selectedBodyMenu) {
+        setPositions();
+        setDate();
+    }
+
 
     setCameraPos();
 
@@ -143,6 +155,7 @@ function drawBodyTrail(bodyIndex) {
     var positions = bodies[bodyIndex].positionsScaled;
 
     noFill();
+    strokeWeight(2);
     stroke(color(BODY_DATA[bodyIndex].color));
     beginShape();
 
@@ -195,6 +208,22 @@ function setPlayPause() {
     }
 
     paused = paused == true ? false : true;
+}
+
+function setDate() {
+    elapsedTime += deltaTime * timeScale;
+
+    var dt = new Date(startDate + elapsedTime);
+
+    var dateString = `${
+        (dt.getMonth()+1).toString().padStart(2, '0')}/${
+        dt.getDate().toString().padStart(2, '0')}/${
+        dt.getFullYear().toString().padStart(4, '0')} ${
+        dt.getHours().toString().padStart(2, '0')}:${
+        dt.getMinutes().toString().padStart(2, '0')}:${
+        dt.getSeconds().toString().padStart(2, '0')}`;
+
+    dateElement.innerHTML = dateString;
 }
 
 function bodyMenuMouseEnter(event) {
@@ -327,7 +356,7 @@ function setTimeScale(scale) {
 }
 
 function timeScaleRangeChange(event) {
-
+    setTimeScale(event.currentTarget.value);
 }
 
 function shiftPositions(bodyIndex) {
